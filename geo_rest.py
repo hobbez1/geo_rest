@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+"""Simple little wsgi/rest server to query google maps API using wifi macs"""
 import os
 from json import dumps, load
 import requests
@@ -22,6 +23,7 @@ class GeoServe:
             ret_val = ({}, [])
         self.found_macs, self.found_groups =  ret_val
 
+        # setup server details
         self._host = self.config.get("host", "127.0.0.1")
         self._port = self.config.get("port", 5050)
         self._app = Bottle()
@@ -70,6 +72,7 @@ class GeoServe:
             """Compare ap list to existing lists, returning true if more thank 90% similair"""
             common = [local_ap for local_ap in aps if local_ap in to_check]
             return len(common)/len(aps) > 0.9
+
         to_comp = self._find_blocks(aps)
         for num in to_comp:
             if compare(aps, self.found_groups[num]["aps"]):
@@ -82,6 +85,7 @@ class GeoServe:
         translate = {"bssid":"macAddress", "channel": "channel", "rssi": "signalStrength"}
         geodata = []
         aps = []
+        # convert data to google api format
         for local_ap in request.json.get("apscan_data"):
             ap_data = {}
             for gotten, newname in translate.items():
@@ -89,11 +93,13 @@ class GeoServe:
             geodata.append(ap_data)
             aps.append(local_ap["bssid"])
         to_send = {"considerIp": "false", "wifiAccessPoints": geodata}
-        maps_url = f"https://www.googleapis.com/geolocation/v1/geolocate?key={self.config['key']}"
+        # check cache for entries
         cached = self._check_cache(aps)
         if cached:
             data = cached
         else:
+            # check google api
+            maps_url = f"https://www.googleapis.com/geolocation/v1/geolocate?key={self.config['key']}"
             req = requests.post(maps_url, data = dumps(to_send))
             if req.status_code == 200:
                 # only add if we got a location
